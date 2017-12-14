@@ -214,13 +214,19 @@ func (d *Driver) Start() error {
 		return fmt.Errorf("IP address never found in dhcp leases file %v", err)
 	}
 
+	setupNFS := func() error {
+		err := d.setupNFSShare()
+		if err != nil {
+			return &commonutil.RetriableError{Err: err}
+		}
+		return nil
+	}
+
 	if len(d.NFSShares) > 0 {
 		log.Info("Setting up NFS mounts")
-		// takes some time here for ssh / nfsd to work properly
-		err = d.setupNFSShare()
-		if err != nil {
-			log.Errorf("NFS setup failed: %s", err.Error())
-			return err
+
+		if err := commonutil.RetryAfter(10, setupNFS, 2*time.Second); err != nil {
+			return fmt.Errorf("NFS setup failed: %v", err)
 		}
 
 	}
@@ -261,7 +267,7 @@ func (d *Driver) setupNFSShare() error {
 		return err
 	}
 
-	mountCommands := fmt.Sprintf("#/bin/bash\\n")
+	mountCommands := fmt.Sprintf("#/bin/bash\\nset -e\\n")
 
 	for _, share := range d.NFSShares {
 		if !path.IsAbs(share[:]) {
@@ -269,7 +275,15 @@ func (d *Driver) setupNFSShare() error {
 		}
 		nfsConfig := fmt.Sprintf("%s %s -alldirs -mapall=%s", share[:], d.IPAddress, user.Username)
 
+		// remove old export if it exists
+		if _, err := nfsexports.Remove("", d.nfsExportIdentifier(share)); err != nil {
+			if !strings.Contains(err.Error(), "not find export") {
+				return err
+			}
+		}
+
 		if _, err := nfsexports.Add("", d.nfsExportIdentifier(share[:]), nfsConfig); err != nil {
+			// if conflicting on same path and IP ignore
 			if strings.Contains(err.Error(), "conflicts with existing export") {
 				log.Info("Conflicting NFS Share not setup and ignored:", err)
 				continue
