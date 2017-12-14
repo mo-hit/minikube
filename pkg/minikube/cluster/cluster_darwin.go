@@ -68,7 +68,9 @@ func createHyperkitHost(config MachineConfig) *hyperkit.Driver {
 		Boot2DockerURL: config.Downloader.GetISOFileURI(config.MinikubeISO),
 		DiskSize:       config.DiskSize,
 		Memory:         config.Memory,
-		CPU:            config.CPUs,
+		CPU:            config.C PUs,
+		NFSShares:      config.NFSShare,
+		NFSSharesRoot:  config.NFSSharesRoot,
 		Cmdline:        "loglevel=3 user=docker console=ttyS0 console=tty0 noembed nomodeset norestore waitusb=10 systemd.legacy_systemd_cgroup_controller=yes base host=" + cfg.GetMachineName(),
 	}
 }
